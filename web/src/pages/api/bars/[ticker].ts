@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { isValidTicker } from "../../../lib/tickerFormat";
 import { getBars } from "../../../lib/priceCache";
 
 export const prerender = false;
@@ -11,7 +12,7 @@ export const prerender = false;
  */
 export const GET: APIRoute = async ({ params }) => {
   const ticker = params.ticker ?? "";
-  if (!/^\d{4}$/.test(ticker)) {
+  if (!isValidTicker(ticker)) {
     return new Response(JSON.stringify({ error: "invalid_ticker" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },

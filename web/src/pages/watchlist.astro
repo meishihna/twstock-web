@@ -22,7 +22,9 @@ try {
     <header class="wl__head">
       <div>
         <h1 class="wl__h1">自選股</h1>
-        <p class="wl__intro">收藏的標的存在此瀏覽器(localStorage)。在報告頁點 ☆ 加入。</p>
+        <p class="wl__intro">
+          收藏的標的存在此瀏覽器(localStorage)。在報告頁點 ☆ 加入,或直接在下方輸入代號。
+        </p>
       </div>
       <div class="wl__actions">
         <span id="wl-count" class="wl__count" role="status"></span>
@@ -31,18 +33,50 @@ try {
       </div>
     </header>
 
+    {/*
+      🔴 關 3:原本唯一入口是 ☆,而 ☆ 只出現在**有個股報告的 4 碼普通股**。
+         使用者持有 `00646` / `009816`(ETF)時,**沒有任何路徑**把它們加進自選。
+         「有一個入口」不等於「有一條路」—— 那條路上還有五道關。
+    */}
+    <form class="wl__add" id="wl-add-form">
+      <label class="wl__add-label" for="wl-add-input">加入代號</label>
+      <input
+        id="wl-add-input"
+        class="wl__inp"
+        type="text"
+        maxlength="6"
+        autocomplete="off"
+        placeholder="2330、00646、009816"
+        aria-label="加入代號"
+      />
+      <button class="wl__btn wl__btn--primary" type="submit">加入</button>
+      <span id="wl-add-msg" class="wl__msg" role="status"></span>
+    </form>
+
     <div id="wl-body" class="wl__grid"></div>
 
     <div id="wl-empty" class="wl__empty" hidden>
       <div class="wl__empty-star">☆</div>
       <p>尚未收藏任何標的。</p>
-      <p class="wl__empty-sub">到<a href="/sectors">報告頁</a>點 ☆ 加入,或用<a href="/screener">選股器</a>找標的。</p>
+      <p class="wl__empty-sub">
+        到<a href="/sectors">報告頁</a>點 ☆ 加入、用<a href="/screener">選股器</a>找標的,
+        或直接在上方輸入代號(ETF 如 <code>00646</code> 也可以)。
+      </p>
     </div>
   </main>
 
   <script>
-    import { getWatchlist, removeWatch } from "../lib/watchlist";
+    import { getWatchlist, removeWatch, setWatchlist } from "../lib/watchlist";
+    import { isTwTicker } from "../lib/tickerFormat";
     import { sectorZh } from "../lib/sector-i18n";
+
+    /**
+     * 🔴 `screener-index.json` 載入完成前,**不可以宣稱任何標的「本站尚無報告」**。
+     *    render() 在 fetch 之前就先跑一次;那一瞬間 index 是空的,
+     *    若據此判斷就會對**每一檔**都說一次假話(而且畫面會閃一下)。
+     *    未載入 → 維持原本行為(連結照給、不下判斷)。
+     */
+    let indexLoaded = false;
 
     type Row = Record<string, string | number | null>;
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -232,17 +266,27 @@ try {
       body.innerHTML = list
         .map((t) => {
           const r = index[t] || { t, n: "", s: "" };
+          /* 🔴 關 5:沒有個股報告就【不連結】,而且【說出來】。
+             連到會 404 的地方是壞的;靜默拿掉連結也是壞的 ——
+             後者會讓人以為是漏畫。(同「留白而不說明,讀起來像算出來是沒有」。) */
+          const covered = !indexLoaded || index[t] != null;
+          const headOpen = covered
+            ? `<a class="wl__item-head" href="/report/${t}">`
+            : `<div class="wl__item-head wl__item-head--plain">`;
+          const headClose = covered ? "</a>" : "</div>";
           return `<article class="wl__item">
             <button class="wl__rm" data-rm="${t}" title="移除" aria-label="移除 ${t}">×</button>
-            <a class="wl__item-head" href="/report/${t}">
+            ${headOpen}
               <div class="wl__head-left">
                 <span class="tk-chip">${t}</span>
-                <span class="wl__name">${r.n ?? ""}</span>
-                <span class="wl__sector">${r.s ? sectorZh(String(r.s)) : "—"}</span>
+                <span class="wl__name">${covered ? (r.n ?? "") : ""}</span>
+                <span class="wl__sector">${covered ? (r.s ? sectorZh(String(r.s)) : "—") : ""}</span>
               </div>
               <div class="wl__quote" data-quote-tk="${t}"><span class="wl__quote-load">···</span></div>
-            </a>
-            ${monthRevAlert(r.mrY, r.mrP, r.mrMoM, r.mrAcc)}
+            ${headClose}
+            ${
+              covered
+                ? `${monthRevAlert(r.mrY, r.mrP, r.mrMoM, r.mrAcc)}
             <dl class="wl__metrics">
               ${metric("市值(百萬)", (r.me ? "~" : "") + fmtInt(r.mc))}
               ${metric("P/E", fmt(r.pe))}
@@ -251,7 +295,9 @@ try {
               ${metric("EPS", fmt(r.eps, 2))}
               ${yoyMetric(r.revYoy)}
             </dl>
-            ${SIGNAL_CODES.has(t) ? `<a class="wl__bt" href="/signals?code=${t}">看回測 →</a>` : ""}
+            ${SIGNAL_CODES.has(t) ? `<a class="wl__bt" href="/signals?code=${t}">看回測 →</a>` : ""}`
+                : `<p class="wl__nocover">本站尚無此標的的個股報告 —— 名稱、產業與財務指標都沒有來源,所以留白而不是填 0。上方報價仍會即時抓取。</p>`
+            }
           </article>`;
         })
         .join("");
@@ -265,12 +311,45 @@ try {
       hydrateQuotes();
     }
 
+    /* ── 關 3:手動加入 ── */
+    {
+      const msgEl = $("wl-add-msg");
+      const say = (m: string) => { if (msgEl) msgEl.textContent = m; };
+      $("wl-add-form")?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const inp = $("wl-add-input") as HTMLInputElement | null;
+        if (!inp) return;
+        const t = (inp.value || "").trim().toUpperCase();
+        if (!t) return;
+        /* 🔴 用語意閘 isTwTicker,不是最寬的 isValidTicker ——
+           後者只保證「不會變成任意 URL 轉發」,`TOTAL` / `CASH` 都過得了。
+           這裡要問的是「使用者打錯字會怎樣」:打錯字應該當場被擋並具名。 */
+        if (!isTwTicker(t)) {
+          say(`「${t}」不像台股代號 —— 需 4~6 碼、數字開頭(可帶 1 個英文字尾)。`);
+          return;
+        }
+        const cur = getWatchlist();
+        if (cur.includes(t)) {
+          inp.value = "";
+          say(`${t} 已經在自選裡。`);
+          return;
+        }
+        setWatchlist([...cur, t]);
+        inp.value = "";
+        say(`已加入 ${t}。`);
+        render();
+      });
+    }
+
     fetch("/data/screener-index.json")
       .then((r) => r.json())
       .then((j) => {
         for (const row of j.rows || []) index[row.t] = row;
+        indexLoaded = true;
         render();
       })
+      /* ⚠️ 載入失敗時 indexLoaded 維持 false → 不宣稱任何標的「尚無報告」。
+         那是刻意的:量不到就不要下判斷。 */
       .catch(render);
     render();
   </script>
@@ -285,6 +364,22 @@ try {
     .wl__en { color: var(--muted); font-weight: 400; font-size: 1rem; }
     .wl__intro { color: var(--muted); font-size: 0.85rem; margin: 0; }
     .wl__actions { display: flex; align-items: center; gap: 0.6rem; }
+
+    .wl__add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; margin: 0 0 1.1rem; }
+    .wl__add-label { font-size: 0.8rem; color: var(--muted); }
+    .wl__inp {
+      width: 190px; height: 36px; padding: 0 12px; border-radius: var(--radius-sm, 8px);
+      border: 1px solid var(--border); background: var(--surface-elevated);
+      color: var(--text); font-size: 0.85rem;
+    }
+    .wl__inp:focus { outline: none; border-color: var(--accent); }
+    .wl__msg { font-size: 0.78rem; color: var(--muted); }
+    /* 未覆蓋標的:標題列不是連結 */
+    .wl__item-head--plain { cursor: default; }
+    .wl__nocover {
+      margin: 0.5rem 0 0; padding: 0.5rem 0.7rem; font-size: 0.78rem; line-height: 1.6;
+      color: var(--muted); border-left: 2px solid var(--border-strong);
+    }
     .wl__count { color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; padding-right: 0.1rem; }
     .wl__btn {
       padding: 7px 15px; border-radius: var(--radius-sm, 8px); font-size: 0.85rem; font-weight: 600;

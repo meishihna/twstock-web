@@ -678,6 +678,15 @@ html::-webkit-scrollbar-corner,
   padding: 1.75rem 1.25rem 3.25rem;
 }
 
+/* 次要導覽:接住從主導覽移出、但全站沒有其他入口的頁面 */
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+}
+
 .site-footer {
   border-top: 1px solid var(--border-subtle);
   padding: 1.35rem 1.25rem;

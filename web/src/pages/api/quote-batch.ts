@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import YahooFinance from "yahoo-finance2";
 import type { QuoteBatchRow } from "../../lib/news-related";
+import { isTwSuffixCandidate } from "../../lib/tickerFormat";
 import { suffixOrder } from "../../lib/stockCodes";
 
 export const prerender = false;
@@ -53,7 +54,11 @@ async function quoteOneYahooSymbol(symbol: string): Promise<QuoteBatchRow | null
   }
 }
 
-async function quoteTwFourDigit(ticker: string): Promise<QuoteBatchRow | null> {
+/**
+ * 台股代號:依 `suffixOrder` 試 `.TW` / `.TWO`,回傳時把 symbol 還原成純代號。
+ * (原名 `quoteTwFourDigit` —— 已不再是四碼限定,ETF `00646` / `009816` 也走這裡。)
+ */
+async function quoteTwBySuffix(ticker: string): Promise<QuoteBatchRow | null> {
   const candidates = suffixOrder(ticker).map((s) => `${ticker}${s}`);
   for (const symbol of candidates) {
     const r = await quoteOneYahooSymbol(symbol);
@@ -103,8 +108,10 @@ export const GET: APIRoute = async ({ url }) => {
 
   await Promise.all(
     symbols.map(async (sym) => {
-      if (/^\d{4}$/.test(sym)) {
-        const r = await quoteTwFourDigit(sym);
+      // 🔴 路由判準用 isTwSuffixCandidate(數字開頭)而非 isValidTicker ——
+      //    本端點混載 GC=F / ^TWOII / BDRY,`BDRY` 會通過 isValidTicker 卻不是台股。
+      if (isTwSuffixCandidate(sym)) {
+        const r = await quoteTwBySuffix(sym);
         if (r) quotes[sym] = r;
         return;
       }

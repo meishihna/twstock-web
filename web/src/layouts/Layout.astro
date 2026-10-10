@@ -8,7 +8,6 @@ import {
   RESEARCH_PAGE,
   SIGNALS_PAGE,
   SITE,
-  TRADES_PAGE,
 } from "../lib/ui";
 
 interface Props {
@@ -98,16 +97,25 @@ const navActive = (href: string) =>
     <header class="site-header">
       <nav class="nav" aria-label="Main navigation">
         <a class="brand" href="/">{SITE.name}</a>
-        {/* 導覽:選股/比較已移出(頁面保留,由自選股與比較頁互相連結) */}
+        {/*
+          導覽 = 找訊探索股票的四條路:產業 / 題材 / 探索 / 自選。
+
+          🔴 **移出導覽 ≠ 刪除。** 以下頁面都還在,各自有入口:
+            /screener  選股器   ← 自選股頁的「選股器」鈕、比較頁空狀態
+            /compare   比較     ← 自選股頁的「並排比較」鈕
+            /news      新聞     ← 頁尾次要導覽(實查:全站原本零入口)
+            /signals   回測     ← 自選股頁逐檔的「看回測 →」+ 頁尾
+            /research  研究方法 ← 頁尾次要導覽(實查:全站原本零入口)
+            /trades    投資組合 ← 僅能由網址進入(退役評估中,見 web/docs/ticker-and-coverage.md)
+            /report/[ticker]    ← **13 個檔案的去處**,不得刪除;理由見同一份文件
+
+          ⚠️ 移出前先確認「還連得到」。孤立頁面與刪除的差別,對使用者是看不出來的。
+        */}
         <div class="nav-links" id="nav-links">
           <a href="/sectors" aria-current={navActive("/sectors") ? "page" : undefined}>產業</a>
           <a href="/map" aria-current={navActive("/map") ? "page" : undefined}>{MAP_PAGE.nav}</a>
           <a href="/discover" aria-current={navActive("/discover") ? "page" : undefined}>{DISCOVER_PAGE.nav}</a>
           <a href="/watchlist" aria-current={navActive("/watchlist") ? "page" : undefined}>自選</a>
-          <a href="/news" aria-current={navActive("/news") ? "page" : undefined}>{NEWS_PAGE.nav}</a>
-          <a href="/signals" aria-current={navActive("/signals") ? "page" : undefined}>{SIGNALS_PAGE.nav}</a>
-          <a href="/trades" aria-current={navActive("/trades") ? "page" : undefined}>{TRADES_PAGE.nav}</a>
-          <a href="/research" aria-current={navActive("/research") ? "page" : undefined}>{RESEARCH_PAGE.nav}</a>
         </div>
         {/* 切換鈕置於 .nav-links 之外 → 不隨導覽橫向捲動 */}
         <button
@@ -148,6 +156,20 @@ const navActive = (href: string) =>
       <slot />
     </main>
     <footer class="site-footer">
+      {/*
+        🔴 次要導覽。移出主導覽的頁面**必須有入口**,否則「頁面保留」在畫面上
+           與「刪除」沒有差別。實查(2026-10-10):
+             /screener /compare /signals 已有入口(自選股頁、比較頁)
+             /news /research **全站零入口** → 收在這裡
+             /trades 退役評估中,刻意不給入口,見 web/docs/ticker-and-coverage.md
+      */}
+      <nav class="footer-nav" aria-label="次要導覽">
+        <a href="/news">{NEWS_PAGE.nav}</a>
+        <a href="/screener">選股器</a>
+        <a href="/compare">比較</a>
+        <a href="/signals">{SIGNALS_PAGE.nav}</a>
+        <a href="/research">{RESEARCH_PAGE.nav}</a>
+      </nav>
       <p class="footer-disclaimer" role="note">{FOOTER.disclaimer}</p>
       <p class="footer-source">
         資料來源：<a

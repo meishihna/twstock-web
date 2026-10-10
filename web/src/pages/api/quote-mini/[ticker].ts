@@ -1,4 +1,5 @@
 import type { APIRoute } from "astro";
+import { isValidTicker } from "../../../lib/tickerFormat";
 import { getMiniQuote } from "../../../lib/priceCache";
 
 export const prerender = false;
@@ -10,7 +11,11 @@ export const prerender = false;
  */
 export const GET: APIRoute = async ({ params }) => {
   const ticker = params.ticker ?? "";
-  if (!/^\d{4}$/.test(ticker)) {
+  // 🔴 關 2:原本的四碼樣式(`^\d{4}$`,不含斜線以免漂移掃描器誤判)
+  //    擋掉 ETF(`00646` / `009816`)——
+  //    `/watchlist` 正是走這條路取價,於是自選加得進去卻永遠顯示不出價。
+  //    用存取閘(只保證不會變成任意 URL 轉發),路由由 priceCache 的後綴解析負責。
+  if (!isValidTicker(ticker)) {
     return new Response(JSON.stringify({ error: "invalid_ticker" }), {
       status: 400,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },

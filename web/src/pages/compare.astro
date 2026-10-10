@@ -12,11 +12,18 @@ import Layout from "../layouts/Layout.astro";
     </header>
 
     <div class="cmp__add">
-      <input id="cmp-input" class="cmp__inp" type="text" inputmode="numeric" maxlength="4" placeholder="加入代號(如 2330)" aria-label="加入代號" />
+      <input id="cmp-input" class="cmp__inp" type="text" maxlength="6" placeholder="加入代號(如 2330)" aria-label="加入代號" />
       <button id="cmp-add" class="cmp__btn cmp__btn--primary" type="button">加入</button>
       <button id="cmp-wl" class="cmp__btn" type="button">用自選股</button>
       <span id="cmp-msg" class="cmp__msg" role="status"></span>
     </div>
+
+    {/*
+      🔴 關 6：帶入自選股或從網址帶代號時，**沒有財務覆蓋的標的原本是靜默丟掉的**。
+         靜默丟掉是這個專案最常見的那個病 —— 使用者只會看到「我有 8 檔，這裡只有 5 檔」。
+         改成具名排除：少了哪幾檔、為什麼少。
+    */}
+    <p id="cmp-excluded" class="cmp__excluded" role="status" hidden></p>
 
     <div class="cmp__card">
       <div class="cmp__table-wrap">
@@ -32,6 +39,7 @@ import Layout from "../layouts/Layout.astro";
 
   <script>
     import { getWatchlist } from "../lib/watchlist";
+    import { isTwTicker } from "../lib/tickerFormat";
 
     type Row = Record<string, string | number | null>;
     const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -68,15 +76,58 @@ import Layout from "../layouts/Layout.astro";
 
     let index: Record<string, Row> = {};
     let indexLoaded = false;
+
+    /**
+     * 🔴 三個清單,不可以合成一個:
+     *   `requested` 使用者要求的(網址 / 自選 / 手動加入)—— 網址與移除都看它
+     *   `tickers`   真的比得了的(有財務覆蓋)—— 表格與「最佳值」看它
+     *   `excluded`  要求了但比不了的 —— **具名顯示**,不是靜默丟掉
+     *
+     * 合成一個會讓排除項在下一次 render 時消失(它已經不在清單裡了),
+     * 於是「少了幾檔」又變回看不見。
+     */
+    let requested: string[] = [];
     let tickers: string[] = [];
+    let excluded: string[] = [];
+
+    /** ⚠️ index 未載入 → 不下判斷(量不到就不要判,否則開頁瞬間會說所有標的都沒覆蓋) */
+    function recompute() {
+      if (!indexLoaded) {
+        tickers = requested.slice();
+        excluded = [];
+        return;
+      }
+      tickers = requested.filter((t) => index[t] != null);
+      excluded = requested.filter((t) => index[t] == null);
+    }
+
+    function renderExcluded() {
+      const el = $("cmp-excluded") as HTMLElement | null;
+      if (!el) return;
+      if (!excluded.length) {
+        el.hidden = true;
+        el.textContent = "";
+        return;
+      }
+      el.hidden = false;
+      el.textContent =
+        `⚠️ ${excluded.length} 檔未納入比較:${excluded.join("、")} —— ` +
+        `本站尚無這些標的的個股報告,沒有財務指標可比。` +
+        `(研究覆蓋目前只含上市櫃普通股;ETF 與黃金現貨尚未收錄。)`;
+    }
 
     function parseUrl(): string[] {
       const p = new URLSearchParams(location.search).get("tickers") || "";
-      return [...new Set(p.split(",").map((s) => s.trim()).filter((s) => /^\d{4}$/.test(s)))].slice(0, MAX);
+      /* 🔴 這裡用語意閘而非四碼樣式(`^\d{4}$`,不寫斜線以免漂移掃描器誤判):
+         網址帶 `00646` 原本會被**靜默丟掉**。
+         形狀不對的(`TOTAL`、`a?b=c`)仍然擋在門外。 */
+      return [...new Set(p.split(",").map((s) => s.trim().toUpperCase()).filter((s) => isTwTicker(s)))].slice(0, MAX);
     }
     function syncUrl() {
       const u = new URL(location.href);
-      if (tickers.length) u.searchParams.set("tickers", tickers.join(","));
+      /* 網址寫 requested,不是 tickers —— 排除是「比不了」,不是「使用者沒要求」。
+         把它從網址洗掉,使用者分享出去的連結會少東西而且沒人知道。 */
+      if (requested.length) u.searchParams.set("tickers", requested.join(","));
       else u.searchParams.delete("tickers");
       history.replaceState(null, "", u);
     }
@@ -95,9 +146,12 @@ import Layout from "../layouts/Layout.astro";
     }
 
     function render() {
+      recompute();
+      renderExcluded();
       const body = $("cmp-body");
       const empty = $("cmp-empty");
-      if (empty) (empty as HTMLElement).hidden = tickers.length > 0;
+      /* 空狀態看 requested:全部被排除時表格是空的,但「使用者什麼都沒要求」是假的 */
+      if (empty) (empty as HTMLElement).hidden = requested.length > 0;
       if (!body) return;
       if (!tickers.length) { body.innerHTML = ""; return; }
 
@@ -105,9 +159,12 @@ import Layout from "../layouts/Layout.astro";
         <th class="cmp__corner">指標</th>
         ${tickers.map((t) => {
           const r = index[t];
+          /* index 載入前 tickers 可能含未覆蓋的標的(recompute 還沒判)——
+             那段視窗內不要給一個會 404 的連結。 */
+          const covered = index[t] != null;
           return `<th class="cmp__tk">
             <span class="cmp__tk-top">
-              <a class="tk-chip" href="/report/${t}">${t}</a>
+              ${covered ? `<a class="tk-chip" href="/report/${t}">${t}</a>` : `<span class="tk-chip">${t}</span>`}
               <button class="cmp__rm" data-rm="${t}" title="移除" aria-label="移除 ${t}">×</button>
             </span>
             <a class="cmp__name" href="/report/${t}">${r?.n ?? "—"}</a>
@@ -144,7 +201,7 @@ import Layout from "../layouts/Layout.astro";
       body.innerHTML = head + sections;
       body.querySelectorAll("[data-rm]").forEach((b) =>
         b.addEventListener("click", () => {
-          tickers = tickers.filter((x) => x !== b.getAttribute("data-rm"));
+          requested = requested.filter((x) => x !== b.getAttribute("data-rm"));
           syncUrl();
           render();
         }),
@@ -154,13 +211,14 @@ import Layout from "../layouts/Layout.astro";
     function addTicker(t: string) {
       const msg = $("cmp-msg");
       const say = (m: string) => { if (msg) msg.textContent = m; };
-      if (!/^\d{4}$/.test(t)) return say("請輸入 4 位代號");
-      if (tickers.includes(t)) return;
-      if (tickers.length >= MAX) return say(`最多比較 ${MAX} 檔`);
+      if (!isTwTicker(t)) return say("請輸入台股代號(4~6 碼、數字開頭)");
+      if (requested.includes(t)) return;
+      if (requested.length >= MAX) return say(`最多比較 ${MAX} 檔`);
       if (!indexLoaded) return say("資料載入中,請稍候…");
-      if (!index[t]) return say(`查無 ${t}`);
+      /* 手動加入是明確動作 → 當場擋下並說明,不要收進去再默默排除 */
+      if (!index[t]) return say(`${t} 本站尚無個股報告,沒有財務指標可比`);
       say("");
-      tickers.push(t);
+      requested.push(t);
       syncUrl();
       render();
     }
@@ -181,12 +239,14 @@ import Layout from "../layouts/Layout.astro";
       const wl = getWatchlist().slice(0, MAX);
       const msg = $("cmp-msg");
       if (!wl.length) { if (msg) msg.textContent = "自選股是空的"; return; }
-      tickers = wl;
+      if (msg) msg.textContent = "";
+      /* 🔴 全部收進 requested;比不了的由 renderExcluded() 具名講出來,不在這裡偷偷濾掉 */
+      requested = wl;
       syncUrl();
       render();
     });
 
-    tickers = parseUrl();
+    requested = parseUrl();
     render();
     fetch("/data/screener-index.json")
       .then((r) => r.json())
@@ -206,6 +266,10 @@ import Layout from "../layouts/Layout.astro";
     .cmp__intro { color: var(--muted); font-size: 0.85rem; margin: 0; line-height: 1.6; }
     .cmp__intro code { font-family: ui-monospace, monospace; font-size: 0.8rem; background: rgba(var(--ink), 0.05); padding: 1px 6px; border-radius: 5px; }
     .cmp__legend { color: var(--accent); }
+    .cmp__excluded {
+      margin: 0 0 1rem; padding: 0.5rem 0.7rem; font-size: 0.8rem; line-height: 1.6;
+      color: var(--accent-hover); border-left: 2px solid var(--accent); background: rgba(var(--ink), 0.03);
+    }
 
     .cmp__add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; margin-bottom: 1.1rem; }
     .cmp__inp {

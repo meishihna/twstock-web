@@ -6,6 +6,7 @@
  */
 
 import YahooFinance from "yahoo-finance2";
+import { isValidTicker } from "./tickerFormat";
 import { suffixOrder } from "./stockCodes";
 
 let _yahooFinance: YahooFinance | null = null;
@@ -111,7 +112,7 @@ async function fetchQuoteSummaryExtras(ticker: string): Promise<{
     institutionPct: null as number | null,
     divYieldPct: null as number | null,
   };
-  if (!/^\d{4}$/.test(ticker)) return empty;
+  if (!isValidTicker(ticker)) return empty;
 
   const yf = yahooFinanceClient();
   for (const suffix of suffixOrder(ticker)) {
@@ -292,7 +293,7 @@ async function fetchYahooChartOnce(ticker: string): Promise<PriceData | null> {
 }
 
 export async function getPrice(ticker: string): Promise<PriceData | null> {
-  if (!/^\d{4}$/.test(ticker)) return null;
+  if (!isValidTicker(ticker)) return null;
 
   const now = Date.now();
   const hit = cache.get(ticker);
@@ -359,7 +360,7 @@ const miniCache = new Map<string, { data: MiniQuote | null; ts: number }>();
 
 /** 盤中分時(5 分 K,range=1d)＋最新報價;5 分鐘記憶體快取。 */
 export async function getMiniQuote(ticker: string): Promise<MiniQuote | null> {
-  if (!/^\d{4}$/.test(ticker)) return null;
+  if (!isValidTicker(ticker)) return null;
   const now = Date.now();
   const hit = miniCache.get(ticker);
   if (hit && now - hit.ts < TTL_MS) return hit.data;
@@ -516,7 +517,7 @@ const barsCache = new Map<string, { bars: Bar[] | null; events: CorpEvent[]; ts:
  * 與 getPrice 共用 Yahoo Chart v8 與 .TW/.TWO 解析；不裁成 90 根、不算 MA（指標交由圖層處理）。
  */
 export async function getBars(ticker: string): Promise<Bar[] | null> {
-  if (!/^\d{4}$/.test(ticker)) return null;
+  if (!isValidTicker(ticker)) return null;
   const now = Date.now();
   const hit = barsCache.get(ticker);
   if (hit && now - hit.ts < TTL_MS) return hit.bars;

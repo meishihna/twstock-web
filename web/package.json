@@ -23,7 +23,8 @@
     "test:import-parse": "npx --yes tsx tests/import-parse.mjs",
     "test:recon-fields": "npx --yes tsx tests/recon-fields.mjs",
     "test:equity": "npx --yes tsx tests/equity-identity.mjs",
-    "test:series": "npx --yes tsx tests/portfolio-series.mjs"
+    "test:series": "npx --yes tsx tests/portfolio-series.mjs",
+    "test:ticker": "npx --yes tsx tests/ticker-format.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^8.3.4",
