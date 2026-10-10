@@ -24,7 +24,8 @@
     "test:recon-fields": "npx --yes tsx tests/recon-fields.mjs",
     "test:equity": "npx --yes tsx tests/equity-identity.mjs",
     "test:series": "npx --yes tsx tests/portfolio-series.mjs",
-    "test:ticker": "npx --yes tsx tests/ticker-format.mjs"
+    "test:ticker": "npx --yes tsx tests/ticker-format.mjs",
+    "test:freshness": "npx --yes tsx tests/freshness.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^8.3.4",

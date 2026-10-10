@@ -819,6 +819,9 @@
   background: color-mix(in srgb, var(--down) 12%, transparent);
   border-color: color-mix(in srgb, var(--down) 30%, transparent);
 }
+/* 過期的簡報要看得出來,不只是「有個日期」 */
+.news-digest-ts.is-stale { color: var(--accent-hover); font-weight: 600; }
+
 .news-digest-ts {
   margin: 0.4rem 0 0;
   font-size: 0.72rem;

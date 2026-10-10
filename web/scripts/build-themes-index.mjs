@@ -58,6 +58,24 @@ function parseTheme(content, fileBase) {
   const indM = content.match(/\*\*關鍵指標:\*\*\s*(.+)/);
   const indicators = parseIndicators(indM ? indM[1].trim() : "");
 
+  /**
+   * 🔴 策展日期 —— 題材卡「核實 YYYY-MM-DD」的**唯一**來源。
+   *
+   * 以前那個欄位用的是 `map-index.json` 的 `generatedAt`,而那是 `prebuild`
+   * 現生的【部署時間】。內容來源(本檔)停在 2026-06,卻每天都顯示「今天核實」——
+   * **一個每天都在動的數字掛著「核實」,比單純過期更嚴重:它看起來永遠健康。**
+   *
+   * 為什麼寫在 .md 裡而不是 build 時現算:
+   *   · `map-index.json` 不進版控 → 沒有「保留前次值」可用
+   *   · 檔案 mtime 在 CI clone 之後 = checkout 時間 → 又一個 build-time 謊言
+   *   · `git log` 在淺 clone(Vercel)可能查不到 100 天前的 commit
+   *   → 唯一在任何環境都成立的來源,是【已進版控的檔案內容】本身。
+   *
+   * ⚠️ 取不到就是 `""`,呼叫端必須【整個不顯示】,**不可以退回任何其他日期**。
+   */
+  const curM = content.match(/\*\*策展日期:\*\*\s*(\d{4}-\d{2}-\d{2})/);
+  const curatedAt = curM ? curM[1] : "";
+
   const tiers = { upstream: [], midstream: [], downstream: [] };
   let current = null;
   for (const line of lines) {
@@ -88,7 +106,7 @@ function parseTheme(content, fileBase) {
     }
   }
 
-  return { slug, title, companyCount, desc, category, cagr, marketSize, indicators, relatedRaw, tiers };
+  return { slug, title, companyCount, desc, category, cagr, marketSize, indicators, relatedRaw, tiers, curatedAt };
 }
 
 function main() {

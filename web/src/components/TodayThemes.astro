@@ -24,7 +24,9 @@ const generatedAt = data?.generatedAt ?? "";
       <div class="tt-head">
         <h2 class="tt-title">今日熱門題材</h2>
         <a class="tt-more" href="/map">熱力圖 →</a>
-        <span class="tt-ts" data-prefix="更新於" />
+        {/* 🔴 前綴要講明「這是哪一份資料的時間」。原本是「更新於」,
+            而它印的其實是【報價抓取時間】—— 沒有主詞的時間戳最容易用錯時鐘。 */}
+        <span class="tt-ts" data-prefix="題材資料" />
       </div>
       <ol class="tt-list" id="tt-list" />
       <script type="application/json" id="tt-data" set:html={JSON.stringify({ limit, rows: pool })} />
@@ -33,6 +35,7 @@ const generatedAt = data?.generatedAt ?? "";
 }
 
 <script>
+  import { freshness, freshnessLabel } from "../lib/freshness";
   interface Con { t: string; n: string; mc: number | null; }
   interface Row {
     slug: string; title: string; companyCount: number; mentions: number;
@@ -106,18 +109,36 @@ const generatedAt = data?.generatedAt ?? "";
         .join("");
     }
 
-    function setTs(fetchedAt: string) {
+    /**
+     * 🔴 **兩個時鐘要分開。**
+     *
+     * 原本是「fetchedAt 有值就用 fetchedAt,否則才用 gen」—— `fetchedAt` 是
+     *   (這裡刻意不寫出那行程式碼,`tests/freshness.mjs` 的掃描守衛分不出註解與程式碼)
+     * `/api/quote-batch` 的【報價抓取時間】,永遠是現在,於是它永遠勝出。
+     * 結果:`today-themes.json` 真的停掉時,畫面仍然顯示「更新於 14:32」。
+     * 而且只印 HH:MM,連「哪一天」都看不出來。
+     *
+     * 那不是「少印一個日期」,是**用報價的新鮮度替題材資料背書**。
+     * 那一步在 workflow 裡還是 `continue-on-error`(失敗不紅燈、舊檔原地留著),
+     * 所以**沒有任何東西會說出來**。
+     */
+    function setTs(quoteAt: string) {
       const el = document.querySelector(".tt-ts") as HTMLElement | null;
       if (!el) return;
-      const pre = el.getAttribute("data-prefix") || "";
+      const pre = el.getAttribute("data-prefix") || "題材資料";
       const gen = (el.closest(".today-themes") as HTMLElement | null)?.getAttribute("data-generated") || "";
-      const src = fetchedAt || gen;
-      if (!src) return;
-      const d = new Date(src);
-      const hhmm = isNaN(d.getTime())
-        ? ""
-        : new Intl.DateTimeFormat("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Taipei" }).format(d);
-      if (hhmm) el.textContent = `${pre} ${hhmm}`;
+
+      const data = freshness(gen, { withTime: true });
+      const quote = freshness(quoteAt, { withTime: true });
+
+      const parts: string[] = [];
+      const dataLabel = freshnessLabel(data, pre);
+      if (dataLabel) parts.push(dataLabel);
+      if (quote.display) parts.push(`報價 ${quote.display}`);
+
+      /* 兩個都量不到 → 整行留空,不印一個光禿禿的前綴 */
+      el.textContent = parts.join(" · ");
+      el.classList.toggle("is-stale", data.stale);
     }
 
     async function load() {
@@ -158,6 +179,8 @@ const generatedAt = data?.generatedAt ?? "";
   .tt-more { font-size: 0.78rem; color: var(--accent); text-decoration: none; }
   .tt-more:hover { color: var(--accent-hover); }
   .tt-ts { font-size: 0.73rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+  /* 題材資料過期時要看得出來 —— 日期可見不等於使用者讀得出它壞了 */
+  .tt-ts.is-stale { color: var(--accent-hover); font-weight: 600; }
 
   .tt-list { list-style: none; margin: 0; padding: 0; }
   .tt-row { padding: 0.45rem 0; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }

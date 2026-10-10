@@ -94,6 +94,7 @@ const pageTitle = `${NEWS_PAGE.title} — ${SITE.name}`;
 </Layout>
 
 <script>
+  import { freshness, freshnessLabel } from "../lib/freshness";
   import { NEWS_PAGE } from "../lib/ui";
   import {
     resolveTickersFromText,
@@ -483,11 +484,18 @@ const pageTitle = `${NEWS_PAGE.title} — ${SITE.name}`;
       }
       sectorRow("強勢", d.sectorsHot, "is-pos");
       sectorRow("弱勢", d.sectorsWeak, "is-neg");
-      if (digest.generatedAt) {
+      /* 🔴 原本只印「更新:<日期>」。日期是真的,但**使用者讀不出它壞了** ——
+         「2026-07-27」對多數人只是一個日期,「74 天前」才是一句話。
+         這一區的標題是「每日簡報」,而產生者(scripts/refresh-news-digest.ps1,
+         本機排程不是 CI)可能已經很久沒跑;**沒有任何東西會說出來**。 */
+      var fr = freshness(digest.generatedAt, { withTime: true });
+      var line = freshnessLabel(fr, "更新");
+      if (line) {
         var ts = document.createElement("p");
-        ts.className = "news-digest-ts";
-        ts.textContent =
-          "更新：" + new Date(digest.generatedAt).toLocaleString("zh-TW");
+        ts.className = "news-digest-ts" + (fr.stale ? " is-stale" : "");
+        ts.textContent = fr.stale
+          ? line + " —— 這份簡報不是今天產生的,內容可能已經過時。"
+          : line;
         digestEl.appendChild(ts);
       }
       digestEl.hidden = false;

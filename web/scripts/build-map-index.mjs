@@ -166,6 +166,9 @@ function main() {
       category: t.category || "",
       cagr: t.cagr || "",
       marketSize: t.marketSize || "",
+      /* 🔴 策展日期逐題材帶出。取不到就是空字串,畫面必須整個不顯示 ——
+         **不可以退回 generatedAt**(那是部署時間,不是策展時間)。 */
+      curatedAt: t.curatedAt || "",
       indicators: t.indicators || [],
       narrative: readNarrative(t.slug),
       aggMcap: Math.round(aggMcap),

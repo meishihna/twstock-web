@@ -98,7 +98,13 @@ export const prerender = true;
     const I18N: Record<string, string> = JSON.parse(
       document.getElementById("tov-i18n")?.textContent || "{}",
     );
-    let verifiedDate = "";
+    /* 🔴 2026-10-10:這裡原本是 `fmtDate(map-index.generatedAt)`,
+       而 generatedAt 是 `prebuild` 現生的【部署時間】。題材內容來源
+       (themes/*.md)停在 2026-06,卡片卻每天都顯示「核實 今天」。
+       **一個每天都在動的數字掛著「核實」,比單純過期更嚴重 ——
+       它看起來永遠健康。**
+       改成逐題材讀 themes/*.md 裡已進版控的 `**策展日期:**`;
+       取不到 → 整個標籤不顯示,不退回任何其他日期。 */
     let curCat = "__all__";
     let curFav = false;
     let favSet = new Set<string>();
@@ -239,7 +245,7 @@ export const prerender = true;
         + `<div class="ind-tags">${cat}${cagr}${pctStr ? `<span class="ind-pct ${pctCls}">${pctStr}</span>` : ""}</div>`
         + `<div class="ind-card2-foot">`
         +   `<a class="ind-explore" href="/themes/${s}?tab=structure">${I18N.explore || "探索 →"}</a>`
-        +   `<span class="ind-verified">${verifiedDate ? `${I18N.verified || "核實"} ${verifiedDate}` : ""}</span>`
+        +   `<span class="ind-verified">${t.curatedAt ? `${I18N.verified || "核實"} ${t.curatedAt}` : ""}</span>`
         + `</div>`
         + `</article>`;
     }
@@ -419,7 +425,7 @@ export const prerender = true;
       .then((r) => r.json())
       .then((j) => {
         themes = j.themes || [];
-        verifiedDate = fmtDate(j.generatedAt);
+        /* 策展日期逐題材讀(t.curatedAt),這裡不再設全域日期 */
         renderPills();
         renderHeatmap();
         renderThemes();

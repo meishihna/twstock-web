@@ -14,6 +14,7 @@ Output: themes/ folder with one .md per theme.
 """
 
 import os
+import datetime as _dt
 import re
 import sys
 from collections import defaultdict
@@ -1859,6 +1860,13 @@ def build_theme_page(theme_tag, theme_def, wl_map, ticker_meta=None):
     # 涵蓋家數:只計入實際列入供應鏈(上/中/下游)者,與價值鏈結構/角色分群/熱力圖一致
     tier_n = sum(1 for e in entries if e.get("role") in ("upstream", "midstream", "downstream"))
     lines.append(f"**涵蓋公司數:** {tier_n}")
+    lines.append("")
+
+    # 策展日期 —— /map 題材卡「核實 YYYY-MM-DD」的唯一來源。
+    # 這裡蓋章,是因為「重新產生這個題材頁」正好就是「這個題材被策展過」的時刻。
+    # 不可以在 build 時現算:map-index.json 不進版控、檔案 mtime 在 CI 是 checkout
+    # 時間、git log 在淺 clone 查不到舊 commit —— 只有寫進版控的內容到處都成立。
+    lines.append(f"**策展日期:** {_dt.date.today().isoformat()}")
     lines.append("")
 
     # Curated metadata (分類必填;CAGR/市場規模/關鍵指標 選填,有才輸出)
