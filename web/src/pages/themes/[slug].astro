@@ -42,6 +42,11 @@ const { slug } = Astro.params;
 // 主資料來自 map-index(tiers 含市值/衍生欄位 + 已解析 related);缺檔則退回 themes-index。
 const mapPath = path.join(process.cwd(), "public/data/map-index.json");
 const themesPath = path.join(process.cwd(), "public/data/themes-index.json");
+/**
+ * 相關產業鏈 —— 由成員重疊算出（build-sector-theme-xref.mjs）。
+ * ⚠️ 缺檔 → 空陣列 → 整塊不顯示。不退回「全部產業」那種假關聯。
+ */
+const xrefPath = path.join(process.cwd(), "public/data/sector-theme-xref.json");
 const mapData = fs.existsSync(mapPath)
   ? JSON.parse(fs.readFileSync(mapPath, "utf8"))
   : { themes: [] };
@@ -62,6 +67,15 @@ if (!theme) {
     aggMcap: 0, related: [], overlap: [],
     tiers: { u: conv(t.tiers.upstream), m: conv(t.tiers.midstream), d: conv(t.tiers.downstream) },
   };
+}
+
+let relIndustries: { slug: string; title: string; shared: number; of: number }[] = [];
+try {
+  if (fs.existsSync(xrefPath)) {
+    relIndustries = (JSON.parse(fs.readFileSync(xrefPath, "utf8")).byTheme || {})[slug] || [];
+  }
+} catch {
+  relIndustries = [];
 }
 
 const tierDefs: { key: "u" | "m" | "d"; label: string }[] = [
@@ -172,6 +186,17 @@ const pageTitle = `${theme.title} — ${THEMES_PAGE.nav} — ${SITE.name}`;
             <span class="theme-rel-chip is-plain">{r.label}</span>
           ),
         )}
+      </p>
+    )}
+    {relIndustries.length > 0 && (
+      <p class="theme-related">
+        {/* 🔴 反向連結。題材 → 產業鏈原本也是零連結，探索的路兩頭都不通。 */}
+        <span class="theme-related-label">相關產業鏈：</span>
+        {relIndustries.map((r) => (
+          <a class="theme-rel-chip" href={`/sectors/chain/${encodeURIComponent(r.slug)}`}>
+            {r.title}<span class="rel-n" title={`與本題材共同成分股 ${r.shared} 檔；該產業鏈共 ${r.of} 檔`}>{r.shared}</span>
+          </a>
+        ))}
       </p>
     )}
     {theme.overlap && theme.overlap.length > 0 && (

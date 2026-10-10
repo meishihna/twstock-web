@@ -39,6 +39,8 @@ web/public/data/themes-index.json
 web/public/data/sector-stats.json
 web/public/data/screener-index.json
 web/public/data/map-index.json
+# 產業鏈 ↔ 題材交叉索引:由上面兩份索引衍生,同樣 prebuild 現生
+web/public/data/sector-theme-xref.json
 web/public/data/momentum.json
 # /news-digest 技能的暫存輸入(每次重生;news-digest.json 本身為內容,需追蹤)
 web/news-snapshot.json

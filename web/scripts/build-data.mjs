@@ -42,4 +42,6 @@ await hub; // stubs reads wikilink-hub output, so wait for hub specifically
 await Promise.all([run("build-wikilink-stubs.mjs"), themes, sector, screener, momentum, search]);
 // map-index(/map 投資題材)+ industries-index(產業 TPEx 鏈)都需 screener+momentum(已 resolved)
 await Promise.all([run("build-map-index.mjs"), run("build-industries-index.mjs")]);
+// 產業鏈 ↔ 投資題材 交叉索引(需上面兩份索引都在)—— 兩個核心頁之間原本零連結
+await run("build-sector-theme-xref.mjs");
 console.error(`[build-data] all indexes built in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

@@ -50,8 +50,18 @@ for (const tk of ["u", "m", "d"] as const) {
     if (!_seenCon.has(c.t)) { _seenCon.add(c.t); hmCons.push({ t: c.t, n: c.n }); }
   }
 }
+/* `anchor` 必須宣告在 `hmNodes` 之前 —— const 有暫時性死區,
+   宣告在後面會是執行期 ReferenceError（型別檢查不會拓到）。 */
+const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
+
+/* 🔴 帶上 target:節點磚原本是不可點的 <div>,要變成切換鍵就得知道自己對應哪一組。
+   不靠節點名稱反查 —— 同名節點可能出現在不同層,反查會靜默點錯一組。 */
 const hmNodes = tiersPresent.flatMap((tk) =>
-  grouped[tk].map((g) => ({ node: g.node, tickers: g.items.map((i: any) => i.t) })),
+  grouped[tk].map((g) => ({
+    node: g.node,
+    tickers: g.items.map((i: any) => i.t),
+    target: anchor(tk, g.node),
+  })),
 );
 
 function momTag(n: number) {
@@ -60,7 +70,23 @@ function momTag(n: number) {
   const a = Math.abs(n);
   return { label: a === 1 ? `營收${dir}` : `連${a}月${dir}`, cls: n > 0 ? "up" : "down" };
 }
-const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
+
+/**
+ * 相關投資題材 —— 由成員重疊算出(web/scripts/build-sector-theme-xref.mjs)。
+ * 🔴 導覽收斂成四項後,「產業」與「題材」是兩個核心頁,而它們之間原本
+ *    **一個連結都沒有**(兩個方向都是 0)。使用者看完上下游,沒有任何路徑
+ *    能問「這些公司屬於哪些題材」—— 唯一的走法是繞到 /report/{ticker}。
+ * ⚠️ 缺檔 → 空陣列 → 整塊不顯示。不退回「全部題材」那種假關聯。
+ */
+let relThemes: { slug: string; title: string; shared: number; of: number }[] = [];
+try {
+  const xp = path.join(process.cwd(), "public/data/sector-theme-xref.json");
+  if (fs.existsSync(xp)) {
+    relThemes = (JSON.parse(fs.readFileSync(xp, "utf8")).byIndustry || {})[ind.slug] || [];
+  }
+} catch {
+  relThemes = [];
+}
 ---
 
 <Layout title={`${ind.title} 產業鏈 — ${SITE.name}`} description={`${ind.title} 產業價值鏈：上中下游與成分股`}>
@@ -75,6 +101,17 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
     {ind.companyCount} 家成分股 ·
     <span class="ind-src">結構參照櫃買中心產業價值鏈平台</span>
   </p>
+
+  {relThemes.length > 0 && (
+    <p class="xref-row">
+      <span class="xref-label">相關投資題材:</span>
+      {relThemes.map((t) => (
+        <a class="xref-chip" href={`/themes/${encodeURIComponent(t.slug)}`}>
+          {t.title}<span class="xref-n" title={`與本產業鏈共同成分股 ${t.shared} 檔;該題材共 ${t.of} 檔`}>{t.shared}</span>
+        </a>
+      ))}
+    </p>
+  )}
 
   {ind.indicators?.length > 0 && (
     <div class="ind-keyrow">
@@ -126,9 +163,12 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
     </div>
   </div>
   <h3 class="ind-hm-h3">分類(節點)</h3>
-  <div id="ind-hm-node" class="ind-hm" role="img" aria-label="產業鏈節點成交額熱力圖" />
+  {/* 🔴 role="img" 不可以包互動內容 —— 輔助技術會把裡面的按鈕/連結整個當成圖片的一部分。
+      節點磚這一輪改成 <button>,所以容器角色一起改;
+      個股磚本來就是 <a>,同一個問題,一併修(不是順手擴大,是同一行同一個錯)。 */}
+  <div id="ind-hm-node" class="ind-hm" role="group" aria-label="產業鏈節點成交額熱力圖(點磚可只看該節點)" />
   <h3 class="ind-hm-h3" id="ind-hm-stock-h">個股</h3>
-  <div id="ind-hm-stock" class="ind-hm" role="img" aria-label="個股成交額熱力圖" />
+  <div id="ind-hm-stock" class="ind-hm" role="group" aria-label="個股成交額熱力圖(點磚前往個股報告)" />
   <div class="ind-legend" aria-label="漲跌色階(紅漲綠跌)">
     <span class="lg-end dn">跌</span>
     {[-6, -4.8, -3.6, -2.4, -1.2, 0, 1.2, 2.4, 3.6, 4.8, 6].map((p) => <i data-pct={p}></i>)}
@@ -139,8 +179,12 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
 
   {/* 角色分群 */}
   <h2 class="ind-sec-h">成分股(依節點分群)</h2>
-  <p class="sc-hint">↑ 點選上方產業鏈節點以查看成分股(可複選,再點一次取消)</p>
-  <div class="sc-rolegrid">
+  {/* 🔴 這一行的內容由 JS 依【目前狀態】改寫(見下方 refresh())。
+      原本寫死成「點選上方節點以查看成分股」,而且成分股預設 display:none ——
+      使用者進頁面看到的是**一檔都沒有**,還得先猜要點哪裡。
+      探索頁的預設狀態不該是空的。 */}
+  <p class="sc-hint" id="sc-hint">共 {ind.companyCount} 檔成分股</p>
+  <div class="sc-rolegrid" id="sc-rolegrid">
     {tiersPresent.map((tk) => (
       <section class="sc-tier">
         {!ind.flat && <div class="sc-tier-title">{TIER[tk]} <span>{ind.tiers[tk].length}</span></div>}
@@ -185,6 +229,19 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
   .ind-key { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.45rem 0.7rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
   .ind-key-l { font-size: 0.7rem; color: var(--text-secondary); }
   .ind-key-v { font-size: 0.85rem; font-weight: 600; }
+  /* 產業 ↔ 題材 的交叉連結。數字一起顯示 ——
+     重疊數會偏袒大題材,讓讀的人自己判斷,而不是只給一個排序後的清單。 */
+  .xref-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.4rem; margin: 0.2rem 0 1.1rem; }
+  .xref-label { color: var(--muted); font-size: 0.82rem; }
+  .xref-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.2rem 0.55rem; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-elevated); color: var(--text);
+    font-size: 0.78rem; text-decoration: none;
+  }
+  .xref-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .xref-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .xref-n { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   .ind-sec-h { font-size: 1.05rem; margin: 1.6rem 0 0.8rem; padding-left: 0.5rem; border-left: 3px solid var(--accent); }
 
   /* 上下游框圖 */
@@ -210,7 +267,12 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
   .sc-tier { display: flex; flex-direction: column; gap: 0.9rem; }
   .sc-hint { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 0.8rem; }
   .sc-tier.hide { display: none; }
-  .sc-subgroup { display: none; flex-direction: column; gap: 0.45rem; scroll-margin-top: 70px; }
+  /* 🔴 預設【顯示】。原本是 display:none,於是進頁面一檔都看不到。
+     節點點選改成「篩選」而不是「唯一的顯示途徑」:
+     有選取時才隱藏未選的那幾組,全部取消就回到顯示全部。 */
+  .sc-subgroup { display: flex; flex-direction: column; gap: 0.45rem; scroll-margin-top: 70px; }
+  .sc-rolegrid.filtering .sc-subgroup { display: none; }
+  .sc-rolegrid.filtering .sc-subgroup.show { display: flex; }
   .sc-subgroup.show { display: flex; }
   .sc-subhead { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin: 0; display: flex; align-items: baseline; gap: 0.35rem; padding-left: 0.4rem; border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); }
   .sc-subn { font-size: 0.72rem; color: var(--text-secondary); }
@@ -241,6 +303,15 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
   #ind-hm-node { height: 300px; }
   #ind-hm-stock { height: 360px; }
   .ind-tile { position: absolute; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 2px 6px; border-radius: 3px; text-decoration: none; }
+  /* 節點磚現在是 <button>:清掉瀏覽器預設,並讓它看得出可點、且與個股磚有別 */
+  .ind-tile.node {
+    appearance: none; border: 1px solid transparent; font: inherit; text-align: left;
+    cursor: pointer; align-items: flex-start;
+  }
+  .ind-tile.node:hover { border-color: currentColor; }
+  .ind-tile.node:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* 選取中:實心外框,和 .chain-node.sel 同一套語彙 */
+  .ind-tile.node.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .ind-tile-t { font-size: 0.72rem; font-weight: 600; color: inherit; line-height: 1.15; }
   .ind-tile-p { font-size: 0.68rem; color: inherit; opacity: 0.85; }
   .ind-hm-empty { color: var(--text-secondary); font-size: 0.82rem; padding: 1rem; text-align: center; }
@@ -283,29 +354,66 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
 </script>
 
 <script>
-  // 框圖節點 = 切換鍵:點選顯示該節點成分股(可複選,再點取消);預設不顯示。
-  const diagram = document.querySelector(".chain-diagram");
-  const hint = document.querySelector<HTMLElement>(".sc-hint");
+  /**
+   * 節點 = **篩選鍵**(不是「唯一的顯示途徑」)。
+   *
+   * 🔴 改動前:`.sc-subgroup` 預設 `display:none`,提示寫著「點選上方節點以查看成分股」。
+   *    使用者進到產業鏈頁看到的是**一檔都沒有** —— 探索頁的預設狀態不該是空的。
+   * 🔴 改動後:預設全部顯示;點節點 = 只看該節點(可複選),全部取消 = 回到全部。
+   *    提示文字**由狀態導出**,不是兩句寫死的話。
+   *
+   * 兩種入口共用同一個 toggle:框圖的 `.chain-node`,以及熱力圖的節點磚
+   * `.ind-tile.node`(原本是不可點的 <div>,而且和可點的個股磚長得一模一樣)。
+   */
+  const hint = document.querySelector<HTMLElement>("#sc-hint");
+  const grid = document.querySelector<HTMLElement>("#sc-rolegrid");
   const tierSecs = [...document.querySelectorAll<HTMLElement>(".sc-tier")];
+  const total = document.querySelectorAll(".sc-card2").length;
+
   function refresh() {
-    const anyShown = !!document.querySelector(".sc-subgroup.show");
-    if (hint) hint.hidden = anyShown;
-    for (const t of tierSecs) t.classList.toggle("hide", !t.querySelector(".sc-subgroup.show"));
+    const shown = [...document.querySelectorAll<HTMLElement>(".sc-subgroup.show")];
+    const filtering = shown.length > 0;
+    grid?.classList.toggle("filtering", filtering);
+    for (const t of tierSecs) t.classList.toggle("hide", filtering && !t.querySelector(".sc-subgroup.show"));
+
+    /* 🔴 由狀態導出。數字也是數出來的,不是寫死的 —— 說「共 N 檔」就要真的是 N 檔。 */
+    if (hint) {
+      if (!filtering) {
+        hint.textContent = `共 ${total} 檔成分股 · 點產業鏈節點或熱力圖的節點磚,可只看該節點(可複選)`;
+      } else {
+        const n = shown.reduce((a, g) => a + g.querySelectorAll(".sc-card2").length, 0);
+        const names = shown.map((g) => g.querySelector(".sc-subhead")?.firstChild?.textContent?.trim() || "").filter(Boolean);
+        hint.textContent = `只看 ${names.join("、")}(${n} / ${total} 檔) · 再點一次取消,全部取消即顯示全部`;
+      }
+    }
+    /* 兩種入口的選取狀態要同步,否則點了熱力圖磚、框圖按鈕卻沒反白 */
+    for (const b of document.querySelectorAll<HTMLElement>("[data-target]")) {
+      const g = document.getElementById(b.dataset.target || "");
+      b.classList.toggle("sel", !!g?.classList.contains("show"));
+      if (b.tagName === "BUTTON") b.setAttribute("aria-pressed", g?.classList.contains("show") ? "true" : "false");
+    }
   }
-  if (diagram) {
-    diagram.querySelectorAll<HTMLButtonElement>(".chain-node").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const grp = document.getElementById(btn.dataset.target || "");
-        if (!grp) return;
-        const shown = grp.classList.toggle("show");
-        btn.classList.toggle("sel", shown);
-        refresh();
-        // 點選顯示 → 自動捲動到該節點的成分股(scroll-margin-top 已預留 sticky nav 高度)。
-        // 延到下一個動畫影格再捲:剛由 display:none→flex 的元素需先完成佈局,否則 scrollIntoView 取到舊位置而不捲。
-        if (shown) requestAnimationFrame(() => grp.scrollIntoView({ behavior: "smooth", block: "start" }));
-      });
-    });
+
+  function toggleTarget(id: string, scroll: boolean) {
+    const grp = document.getElementById(id);
+    if (!grp) return;
+    const shown = grp.classList.toggle("show");
+    refresh();
+    /* 延到下一個動畫影格再捲:剛改變 display 的元素要先完成佈局,否則取到舊位置 */
+    if (shown && scroll) requestAnimationFrame(() => grp.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
+
+  document.querySelector(".chain-diagram")?.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>(".chain-node");
+    if (btn?.dataset.target) toggleTarget(btn.dataset.target, true);
+  });
+
+  /* 熱力圖的節點磚:磚是 JS 後繪的,所以綁在容器上(事件委派) */
+  document.getElementById("ind-hm-node")?.addEventListener("click", (e) => {
+    const tile = (e.target as HTMLElement).closest<HTMLElement>(".ind-tile.node");
+    if (tile?.dataset.target) toggleTarget(tile.dataset.target, true);
+  });
+
   refresh();
 </script>
 
@@ -325,7 +433,7 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
       ? (px[t] * vol[t]) / 1e8
       : s[period][1];
   const hmCons: { t: string; n: string }[] = JSON.parse(document.getElementById("ind-hm-cons")?.textContent || "[]");
-  const hmNodes: { node: string; tickers: string[] }[] = JSON.parse(document.getElementById("ind-hm-nodes")?.textContent || "[]");
+  const hmNodes: { node: string; tickers: string[]; target?: string }[] = JSON.parse(document.getElementById("ind-hm-nodes")?.textContent || "[]");
   const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
 
   function renderStock() {
@@ -368,15 +476,22 @@ const anchor = (tier: string, node: string) => `n-${tier}-${node}`;
     const rows = hmNodes.map((g) => ({ g, st: nodeStat(g) })).filter((x) => x.st.tov > 0)
       .sort((a, b) => b.st.tov - a.st.tov); // 依成交額由大到小 → 最大在左、往右下遞減
     if (rows.length === 0) { root.innerHTML = `<p class="ind-hm-empty">暫無成交額資料</p>`; return; }
-    const laid = treemap(rows.map((x) => ({ node: x.g.node, count: x.g.tickers.length, value: Math.sqrt(x.st.tov), _chg: x.st.chg, _tov: x.st.tov })), 0, 0, W, H);
+    /* target 要一路帶到磚上 —— treemap 是泛型會保留欄位,漏在【輸入】這層就什麼都沒有。
+       (第一次就漏了:磚確實變成 <button>,但 data-target 全空,點了沒反應。) */
+    const laid = treemap(rows.map((x) => ({ node: x.g.node, target: x.g.target, count: x.g.tickers.length, value: Math.sqrt(x.st.tov), _chg: x.st.chg, _tov: x.st.tov })), 0, 0, W, H);
     const G = 1;
     root.innerHTML = laid.map((t) => {
       const tt = t as typeof t & { _chg: number | null; count: number; _tov: number };
       const p = tt._chg;
       const big = t.w > 60 && t.h > 28, showP = p != null && t.w > 48 && t.h > 40;
-      return `<div class="ind-tile node" data-name="${esc(t.node)}" data-count="${tt.count}" data-chg="${p != null ? p.toFixed(2) : ""}" data-tov="${tt._tov}" style="left:${t.x + G}px;top:${t.y + G}px;width:${Math.max(0, t.w - 2 * G)}px;height:${Math.max(0, t.h - 2 * G)}px;background:${tileColor(p ?? null)};color:${tileTextColor(p ?? null)}">`
+      /* 🔴 原本是不可點的 <div>,而且和可點的個股磚【視覺完全相同】——
+         看起來能點、點了沒反應,比明顯不能點更糟。
+         改成 <button>:可點、可 Tab、可 Enter/Space,並帶 data-target 指向
+         對應的成分股分組(由 hmNodes 在 build 時產生,不靠名稱反查)。 */
+      const tgt = t.target ? ` data-target="${esc(t.target)}"` : "";
+      return `<button type="button" class="ind-tile node"${tgt} aria-pressed="false" title="只看「${esc(t.node)}」的 ${tt.count} 檔成分股" data-name="${esc(t.node)}" data-count="${tt.count}" data-chg="${p != null ? p.toFixed(2) : ""}" data-tov="${tt._tov}" style="left:${t.x + G}px;top:${t.y + G}px;width:${Math.max(0, t.w - 2 * G)}px;height:${Math.max(0, t.h - 2 * G)}px;background:${tileColor(p ?? null)};color:${tileTextColor(p ?? null)}">`
         + (big ? `<span class="ind-tile-t">${esc(t.node)}</span>` : "")
-        + (showP ? `<span class="ind-tile-p">${p! > 0 ? "+" : ""}${p!.toFixed(2)}%</span>` : "") + `</div>`;
+        + (showP ? `<span class="ind-tile-p">${p! > 0 ? "+" : ""}${p!.toFixed(2)}%</span>` : "") + `</button>`;
     }).join("");
   }
 
