@@ -64,7 +64,7 @@ const wan = (z: number) => (z / 1e4).toFixed(1); // 張 → 萬張
             <div class="mf-head">
               <h2 class="mf-title">三大法人</h2>
               <span class="mf-tag">上市</span>
-              <span class="mf-date">{inst.date}</span>
+              <span class="mf-date" data-mf-date={inst.date}>{inst.date}</span>
             </div>
             <table class="mf-table">
               <thead>
@@ -107,7 +107,7 @@ const wan = (z: number) => (z / 1e4).toFixed(1); // 張 → 萬張
             <div class="mf-head">
               <h2 class="mf-title">資券變化</h2>
               <span class="mf-tag">上市</span>
-              <span class="mf-date">{margin.date}</span>
+              <span class="mf-date" data-mf-date={margin.date}>{margin.date}</span>
             </div>
             <ul class="mf-bal">
               {margin.margin && (
@@ -149,6 +149,37 @@ const wan = (z: number) => (z / 1e4).toFixed(1); // 張 → 萬張
   )
 }
 
+
+<script>
+  import { freshness } from "../lib/freshness";
+
+  /**
+   * 🔴 「N 天前」**必須在瀏覽器算**。
+   *
+   * 首頁是靜態產生的(output: "hybrid",本頁沒有 prerender = false),
+   * HTML 在 build 時就定稿。若在伺服器端算「距今幾天」,
+   * 算出來的是 **build 當下**的答案,會被烘進靜態檔 ——
+   * 那正是這一輪在修的那個病(用 build 時間冒充現在)。
+   *
+   * 資料日期本身是事實,SSR 印出來沒問題;**「距今多久」是會動的,只能在瀏覽器算**。
+   */
+
+  /* 門檻 6 天,不是預設的 3:
+     市場資料只在交易日更新。週五收盤 → 週一早上就是 3 天,
+     用 3 天會**每個週一都誤報**。「會叫的假警報比不叫更糟」。
+     6 天蓋得住一般連假;農曆年休市更久時會顯示「(9 天前)」——
+     那不是誤報,那是事實:市場關了那麼久。 */
+  const STALE_DAYS = 6;
+
+  for (const el of document.querySelectorAll<HTMLElement>("[data-mf-date]")) {
+    const f = freshness(el.getAttribute("data-mf-date"), { staleAfterDays: STALE_DAYS });
+    /* 量不到 → 什麼都不做(保留 SSR 印出的原文),不宣稱新也不宣稱舊 */
+    if (!f.display || !f.stale || f.ageDays == null) continue;
+    el.textContent = `${f.display}(${f.ageDays} 天前)`;
+    el.classList.add("is-stale");
+  }
+</script>
+
 <style>
   .mf { margin: 0 0 1.6rem; }
   .mf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -157,6 +188,8 @@ const wan = (z: number) => (z / 1e4).toFixed(1); // 張 → 萬張
   .mf-title { font-family: var(--font-display); font-size: 1.08rem; margin: 0; color: var(--text-heading); }
   .mf-tag { font-size: 0.68rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
   .mf-date { font-size: 0.74rem; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+  /* 資料過期時要看得出來 —— 日期可見不等於使用者讀得出它壞了 */
+  .mf-date.is-stale { color: var(--accent-hover); font-weight: 700; }
 
   .mf-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
   .mf-table th { text-align: right; font-weight: 600; font-size: 0.68rem; color: var(--muted); padding: 0 6px 6px; letter-spacing: 0.03em; }

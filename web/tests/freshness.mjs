@@ -21,7 +21,7 @@ import { freshness, freshnessLabel, STALE_AFTER_DAYS } from "../src/lib/freshnes
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const PLAN = 29 - 2 + 8 + 4; /* 靜態 29 行,其中 2 行在迴圈內(8 次 + 4 次) */
+const PLAN = 39 - 2 + 8 + 4; /* 靜態 39 行,其中 2 行在迴圈內(8 次 + 4 次) */
 let pass = 0;
 const fails = [];
 const ok = (cond, label, detail = "") => {
@@ -115,6 +115,37 @@ ok(f("2026-10-09T08:00:00Z", { staleAfterDays: 5 }).stale === false, "對照:同
     /verifiedDate\s*=\s*fmtDate\(j\.generatedAt\)/.test("        verifiedDate = fmtDate(j.generatedAt);"),
     "對照:掃描器抓得到舊寫法(generatedAt 當核實日期)"
   );
+}
+
+/* ── MarketFocus:產生者 + 卡片自己說真話,兩半都要在 ───────────── */
+{
+  const mf = fs.readFileSync(path.join(WEB, "src/components/MarketFocus.astro"), "utf8");
+  ok(mf.length > 0, "MarketFocus 讀得到(否則下面恆真)");
+  ok(mf.includes("data-mf-date"), "MarketFocus 把資料日期帶給前端");
+
+  /* 🔴 「N 天前」必須在瀏覽器算:首頁是靜態產生的,
+     在 frontmatter(--- 之間)算會把 build 當下的答案烘進 HTML。 */
+  const fmEnd = mf.indexOf("---", mf.indexOf("---") + 3);
+  const frontmatter = mf.slice(0, fmEnd);
+  ok(fmEnd > 0, "找得到 frontmatter 範圍(否則下一條沒有意義)");
+  ok(
+    !/\bfreshness\s*\(/.test(frontmatter),
+    "🔴 不得在 frontmatter(SSR)算新鮮度 —— 那會把 build 時間烘進靜態 HTML"
+  );
+  ok(/<script>[\s\S]*freshness/.test(mf.slice(fmEnd)), "新鮮度在 <script>(瀏覽器端)算");
+  ok(/staleAfterDays:\s*STALE_DAYS/.test(mf) && /STALE_DAYS\s*=\s*6/.test(mf),
+     "門檻 6 天(週五→週一是 3 天,用預設會每個週一誤報)");
+
+  const wf = fs.readFileSync(path.join(WEB, "..", ".github/workflows/refresh-snapshots.yml"), "utf8");
+  ok(wf.length > 0, "workflow 讀得到");
+  ok(
+    !wf.includes("已改由【官方】BFI82U + MI_MARGN 產出"),
+    "🔴 那句不實註解已刪除(留著比沒有註解更糟)"
+  );
+  ok(wf.includes("build_market_focus.py"), "🔴 產生者真的接上 workflow(不是只寫在註解裡)");
+
+  const prod = fs.readFileSync(path.join(WEB, "..", "scripts/build_market_focus.py"), "utf8");
+  ok(prod.includes("BFI82U") && prod.includes("selectType=MS"), "產生者用的是實測過的兩個端點");
 }
 
 /* ── 題材檔都要有策展日期,否則 /map 的標籤會整排消失 ───────────── */

@@ -40,11 +40,28 @@ jobs:
         working-directory: web
         run: node scripts/build-data.mjs
 
-      # 三大法人 + 資券(market-focus.json)已改由【官方】BFI82U + MI_MARGN 產出,
-      # 原本在此的 update_market_focus.py(FinMind)已移除。
-      # ⚠️ 本 workflow 其餘步驟(top-movers / today-themes / heatmap-stats /
-      #    valuation-index / chips-index / chips-history)【全部是官方來源】,
-      #    不可因為移除上面那一步而停掉整支。
+      # 🔴 這裡原本寫著「market-focus.json 已改由官方 BFI82U + MI_MARGN 產出」——
+      #    那是【不實陳述】:openapi.twse.com.tw 的 143 個端點裡根本沒有 BFI82U,
+      #    而且移除 update_market_focus.py(FinMind)之後**沒有任何一步補上**。
+      #    結果 market-focus.json 停在 2026-07-31 整整 68 天,首頁照常顯示。
+      #    留著一句不實註解,比沒有註解更糟:它會讓下一個人以為有東西在跑。
+      #    2026-10-10 補回產生者(見下一步),並把這段改成事實。
+      #
+      # ⚠️ 本 workflow 的步驟(market-focus / top-movers / today-themes /
+      #    heatmap-stats / valuation-index / chips-index / chips-history)
+      #    【全部是官方來源】,任何一步失敗都不可以停掉整支。
+      #
+      # 🔴 這些步驟都是 continue-on-error —— 失敗不紅燈、舊檔原地留著。
+      #    那是刻意的(一個端點壞掉不該讓其餘輸出一起停),
+      #    **但它意味著 CI 不會告訴任何人**。所以防線在另一邊:
+      #    頁面自己印出資料日期、超過門檻就標色並說「N 天前」。
+      #    見 web/docs/data-freshness.md。
+
+      - name: 市場焦點 (market-focus.json)
+        # 三大法人買賣金額 + 信用交易統計(市場合計),TWSE 官方 RWD 端點。
+        # exit 2 = 有一半沿用舊資料(卡片會把日期與天數顯示出來)。
+        run: python scripts/build_market_focus.py
+        continue-on-error: true
 
       - name: 今日強勢股 (top-movers.json)
         working-directory: web
