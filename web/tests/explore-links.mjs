@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DATA = path.join(WEB, "public", "data");
 
-const PLAN = 34; /* 靜態 34 行,無迴圈 */
+const PLAN = 48; /* 靜態 48 行,無迴圈 */
 let pass = 0;
 const fails = [];
 const ok = (c, label, detail = "") => {
@@ -139,6 +139,57 @@ const THEME = read(path.join(WEB, "src/pages/themes/[slug].astro"));
 ok(THEME.length > 0, "題材頁讀得到");
 ok(/href=\{`\/sectors\/chain\/\$\{encodeURIComponent\(r\.slug\)\}`\}/.test(THEME), "🔴 題材頁有連回產業鏈的連結");
 ok(THEME.includes("relIndustries"), "題材頁讀 xref");
+
+/* ── 題材品質：留下來的都要是【手寫的】 ───────────── */
+{
+  /* 🔴 2026-10-11 砍掉 51 個機械衍生題材。判準是「是不是手寫的」：
+     有敘事 或 有市場規模。這條現在是不變量 —— 再堆回來就會紅，
+     而不是「下次盤點才發現列表又混進機械題材」。 */
+  const handwritten = (t) => !!t.narrative || !!(t.marketSize || "").trim();
+  const bad = themes.filter((t) => !handwritten(t));
+  ok(themes.length > 0, `題材非空（${themes.length} 個）`);
+  ok(bad.length === 0, "🔴 每個題材都有敘事或市場規模（手寫訊號）", bad.map((t) => t.title).slice(0, 5).join("、"));
+  /* 對照：判準本身要有鑑別力 —— 兩種訊號都要真的有人有 */
+  ok(themes.some((t) => t.narrative), "對照：有題材靠【敘事】通過");
+  ok(themes.some((t) => !t.narrative && (t.marketSize || "").trim()), "對照：有題材靠【市場規模】通過（semi-foundry）");
+  /* 🔴 標題字元只是相關,不是定義。留下的題材裡仍可以有「｜」——
+     只要它是手寫的。這一條防的是「下次有人把判準換回字元比對」。 */
+  ok(
+    themes.some((t) => t.title.includes("｜")) === themes.some((t) => t.title.includes("｜") && handwritten(t)),
+    "判準不是標題字元:帶「｜」的題材只要手寫就留得下來"
+  );
+}
+
+/* ── 三個「沒有」都要說出來，不得靜默消失 ────────── */
+{
+  const REPORT = read(path.join(WEB, "src/pages/report/[ticker].astro"));
+  ok(REPORT.length > 0, "報告頁讀得到");
+  ok(REPORT.includes("report-themes-none"), "報告頁有「沒有題材」的說明樣式");
+  ok(
+    REPORT.includes("本站尚未將此標的歸入任何投資題材"),
+    "🔴 報告頁：沒有題材時會說出來（1,152 檔會看到這句）"
+  );
+  ok(REPORT.includes("/sectors/chain/"), "🔴 第二態給出路：連到它的產業價值鏈");
+  ok(REPORT.includes('href="/discover"'), "🔴 第三態給出路：連到 /discover（那 187 檔沒有產業鏈可給）");
+  /* 對照：舊寫法是「memberThemes.length > 0 && (整個 <section>」，沒題材就整塊消失。
+     用 [\s\S] 跨行比對，不要在原始碼裡放真的換行。 */
+  ok(
+    !/memberThemes\.length > 0 &&[\s\S]{0,20}<section/.test(REPORT),
+    "🔴 不得回到「沒題材 → 整塊消失」"
+  );
+
+  ok(CHAIN.includes("xref-none"), "產業鏈頁有「0 相關題材」的說明樣式");
+  ok(
+    CHAIN.includes("目前沒有與此產業鏈重疊達門檻"),
+    "🔴 產業鏈頁：0 相關題材會說出來（7 個產業鏈會看到）"
+  );
+
+  /* 個股 → 產業鏈的對應要真的在，否則第二態給不出路 */
+  ok(
+    x.industriesByTicker && Object.keys(x.industriesByTicker).length > 1000,
+    `xref 帶個股→產業鏈對應（${Object.keys(x.industriesByTicker || {}).length} 檔）`
+  );
+}
 
 /* ── 產生者要在管線裡,不是只放在 scripts/ ──────────────────── */
 const BD = read(path.join(WEB, "scripts/build-data.mjs"));

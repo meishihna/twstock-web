@@ -84,12 +84,26 @@ function main() {
     return m;
   };
 
+  /**
+   * 個股 -> 所屬產業價值鏈。
+   * 🔴 報告頁的「所屬投資題材」在沒有題材時要給一條出路,而最現成的出路
+   *    就是它所屬的產業鏈。沒有這份對應,那段文字會變成一個沒有出口的句子。
+   * ⚠️ 這是【產業價值鏈】(TPEx),不是報告頁 hero 的研究分類 —— 兩者來源不同。
+   */
+  const industriesByTicker = {};
+  for (const i of iM) {
+    for (const t of i.set) {
+      (industriesByTicker[t] ||= []).push({ slug: i.slug, title: i.title });
+    }
+  }
+
   const payload = {
     generatedAt: new Date().toISOString(),
     minShared: MIN_SHARED,
     topN: TOP_N,
     byIndustry: trim(byIndustry),
     byTheme: trim(byTheme),
+    industriesByTicker,
   };
   writeFileSync(OUT, JSON.stringify(payload), "utf8");
 
@@ -97,7 +111,8 @@ function main() {
   const emptyT = Object.values(payload.byTheme).filter((v) => !v.length).length;
   console.log(
     `[xref] wrote ${OUT} | 產業 ${iM.length}(無相關 ${emptyI}) · 題材 ${tM.length}(無相關 ${emptyT})` +
-      ` · 重疊≥${MIN_SHARED} 的配對 ${pairs}`
+      ` · 重疊≥${MIN_SHARED} 的配對 ${pairs}` +
+      ` · 個股→產業鏈 ${Object.keys(industriesByTicker).length} 檔`
   );
   /* 🔴 若絕大多數都沒有相關,那不是「資料就是這樣」,是判準選錯了 —— 讓它喊出來 */
   if (emptyI > iM.length * 0.5 || emptyT > tM.length * 0.5) {

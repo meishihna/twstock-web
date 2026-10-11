@@ -57,7 +57,7 @@ import {
 } from "../../lib/valuationSnapshot";
 import { chipsSnapshotRow, chipsInstDate } from "../../lib/chipsSnapshot";
 import { chipsHistoryForTicker } from "../../lib/chipsHistory";
-import { themesForTicker } from "../../lib/themeXref";
+import { themesForTicker, industriesForTicker } from "../../lib/themeXref";
 import { officialIndustryFor } from "../../lib/stockMeta";
 import {
   readRevenueMixForTicker,
@@ -326,6 +326,8 @@ const valuation: ValuationParsed = valSnapRow
 // 籌碼面快照(三大法人最新一日 + 融資融券),供財務儀表板「籌碼面」分頁
 const chipsRow = chipsSnapshotRow(ticker!);
 const memberThemes = themesForTicker(ticker!); // ④ 所屬投資題材(/map 跨題材)
+/* 沒有題材時的出路:它所屬的【產業價值鏈】(非 hero 的研究分類,來源不同) */
+const memberIndustries = industriesForTicker(ticker!);
 const chipsDate = chipsInstDate();
 const chipsHistory = chipsHistoryForTicker(ticker!);
 
@@ -660,18 +662,43 @@ const reportLd = [
 
   <ValuationSection ticker={meta.ticker} valuation={valuation} />
 
-  {
-    memberThemes.length > 0 && (
-      <section class="report-themes" aria-label="所屬投資題材">
-        <h2 class="report-themes-h">所屬投資題材</h2>
-        <div class="report-themes-chips">
-          {memberThemes.map((t) => (
-            <a class="report-theme-chip" href={`/themes/${encodeURIComponent(t.slug)}`}>{t.title}</a>
+  {/*
+    🔴 2026-10-11:原本是「沒有題材 → 整個區塊消失」。
+       砍掉 51 個機械衍生題材後,這會發生在 1,152 檔上(78 檔是這次新造成的)——
+       而「整塊消失」在畫面上與「這個功能不存在」沒有差別。
+
+       改成三態,而且每一態都要有出口:
+         有題材         → 列出題材
+         沒題材、有產業鏈 → 說明 + 連到它的產業價值鏈(現成的去處)
+         兩者都沒有     → 說明 + 連到 /discover(關鍵字反查),不留下一個沒有出口的句子
+
+       ⚠️ 第三態目前有 187 檔(其中 8 檔是本次改動新製造的,已具名記入
+          web/docs/theme-coverage.md)。
+  */}
+  <section class="report-themes" aria-label="所屬投資題材">
+    <h2 class="report-themes-h">所屬投資題材</h2>
+    {memberThemes.length > 0 ? (
+      <div class="report-themes-chips">
+        {memberThemes.map((t) => (
+          <a class="report-theme-chip" href={`/themes/${encodeURIComponent(t.slug)}`}>{t.title}</a>
+        ))}
+      </div>
+    ) : memberIndustries.length > 0 ? (
+      <p class="report-themes-none">
+        本站尚未將此標的歸入任何投資題材。可從它所屬的產業價值鏈看上下游:
+        <span class="report-themes-chips">
+          {memberIndustries.map((i) => (
+            <a class="report-theme-chip" href={`/sectors/chain/${encodeURIComponent(i.slug)}`}>{i.title}</a>
           ))}
-        </div>
-      </section>
-    )
-  }
+        </span>
+      </p>
+    ) : (
+      <p class="report-themes-none">
+        本站尚未將此標的歸入任何投資題材,也尚未收錄它所屬的產業價值鏈。
+        可到<a href="/discover">探索</a>用關鍵字反查相關個股。
+      </p>
+    )}
+  </section>
 
   {
     finDataUnavailable && (
@@ -974,6 +1001,9 @@ const reportLd = [
     font-size: 0.95rem; font-weight: 600; color: var(--fg, var(--text)); margin: 0 0 0.55rem;
   }
   .report-themes-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .report-themes-none { margin: 0; font-size: 0.85rem; line-height: 1.8; color: var(--muted); }
+  .report-themes-none .report-themes-chips { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; margin-left: 0.35rem; vertical-align: middle; }
+  .report-themes-none a { color: var(--accent); }
   .report-theme-chip {
     display: inline-flex; align-items: center;
     padding: 4px 11px; border-radius: 999px;

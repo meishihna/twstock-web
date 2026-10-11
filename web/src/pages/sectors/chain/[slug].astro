@@ -102,6 +102,16 @@ try {
     <span class="ind-src">結構參照櫃買中心產業價值鏈平台</span>
   </p>
 
+  {/* 🔴 沒有相關題材時【說出來】,不要靜默消失。
+      2026-10-11 砍掉 51 個機械衍生題材後,有 7 個產業鏈落在這一態
+      (其中 3 個是本次新造成的:交通運輸及航運 / 自動化 / 金融科技)。
+      「沒有重疊達門檻的題材」與「這個功能不存在」,在畫面上不該長得一樣。 */}
+  {relThemes.length === 0 && (
+    <p class="xref-row xref-none">
+      目前沒有與此產業鏈重疊達門檻(共同成分股 ≥ 2 檔)的投資題材。
+      可到<a href="/map">投資題材</a>瀏覽全部題材,或到<a href="/discover">探索</a>用關鍵字反查。
+    </p>
+  )}
   {relThemes.length > 0 && (
     <p class="xref-row">
       <span class="xref-label">相關投資題材:</span>
@@ -241,6 +251,8 @@ try {
   }
   .xref-chip:hover { border-color: var(--accent); color: var(--accent); }
   .xref-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .xref-none { color: var(--muted); font-size: 0.82rem; line-height: 1.7; }
+  .xref-none a { color: var(--accent); }
   .xref-n { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
   .ind-sec-h { font-size: 1.05rem; margin: 1.6rem 0 0.8rem; padding-left: 0.5rem; border-left: 3px solid var(--accent); }
 
