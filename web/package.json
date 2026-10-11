@@ -12,7 +12,7 @@
     "dev:plain": "astro dev",
     "prebuild": "node scripts/build-data.mjs && node scripts/check-selfcontained.mjs",
     "build": "astro build",
-    "postbuild": "node scripts/generate-sitemap.mjs",
+    "postbuild": "node scripts/generate-sitemap.mjs && node scripts/fix-vercel-runtime.mjs",
     "preview": "astro preview",
     "test:news-resolve": "npx --yes tsx scripts/test-news-resolve.ts",
     "test:news-nlp": "npx --yes tsx scripts/test-news-nlp.ts",
@@ -27,7 +27,8 @@
     "test:ticker": "npx --yes tsx tests/ticker-format.mjs",
     "test:freshness": "npx --yes tsx tests/freshness.mjs",
     "test:explore": "npx --yes tsx tests/explore-links.mjs",
-    "verify:deploy": "node scripts/verify-deploy.mjs"
+    "verify:deploy": "node scripts/verify-deploy.mjs",
+    "build:vercel": "node scripts/build-vercel.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^8.3.4",

@@ -67,3 +67,6 @@ tw-stock-public/
 twstock-engine/
 # 引擎原始輸出(過大/非本站使用者需要):只保留 web/public/data/signals/ 下的成品
 data/signals_raw/
+
+# 本機以部署路徑建置(npm run build:vercel)的產物
+web/.vercel/
