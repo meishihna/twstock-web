@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "predev": "node scripts/build-data.mjs && node scripts/check-selfcontained.mjs",
@@ -26,7 +26,8 @@
     "test:series": "npx --yes tsx tests/portfolio-series.mjs",
     "test:ticker": "npx --yes tsx tests/ticker-format.mjs",
     "test:freshness": "npx --yes tsx tests/freshness.mjs",
-    "test:explore": "npx --yes tsx tests/explore-links.mjs"
+    "test:explore": "npx --yes tsx tests/explore-links.mjs",
+    "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "dependencies": {
     "@astrojs/node": "^8.3.4",

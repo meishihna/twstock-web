@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
       # 先證明這支檢查是活的(注入已知違規 → 必須抓到),再相信它報的「0」。
       - name: Self-test the checker
         working-directory: web
